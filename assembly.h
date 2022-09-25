@@ -1,6 +1,7 @@
 
 #define TBLPAG 0x32
 #define NVMCON 0x760
+#define NVMKEY 0x766
 #define VISI   0x784
 
 #define W0     0
@@ -21,27 +22,27 @@
 #define W15    15
 #define WR     15
 
-typedef enum
-{
+typedef enum addressing_mode {
     DIRECT = 0,
     INDIRECT = 1,
     POST_DECREMENT = 2,
     POST_INCREMENT = 3,
     PRE_DECREMENT = 4,
     PRE_INCREMENT = 5
-} AddrMode;
+} addressing_mode_t;
 
 void NOP();
-void CLR(uint8_t wreg, AddrMode addr_mode);
+void DISI(uint16_t cycles);
+void CLR(uint8_t wreg, addressing_mode_t addr_mode);
 void BSET(uint16_t addr, uint8_t bit4);
-void TBLWTL(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode);
-void TBLWTLB(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode);
-void TBLWTH(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode);
-void TBLWTHB(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode);
-void TBLRDL(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode);
-void TBLRDLB(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode);
-void TBLRDH(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode);
-void TBLRDHB(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode);
+void TBLWTL(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode);
+void TBLWTLB(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode);
+void TBLWTH(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode);
+void TBLWTHB(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode);
+void TBLRDL(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode);
+void TBLRDLB(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode);
+void TBLRDH(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode);
+void TBLRDHB(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode);
 void MOVI(uint16_t data, uint8_t wreg);
 void MOVW(uint8_t wreg, uint16_t addr);
 void MOVF(uint16_t addr, uint8_t wreg);

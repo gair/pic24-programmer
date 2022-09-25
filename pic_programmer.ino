@@ -1,49 +1,11 @@
 #include "assembly.h"
 #include "programmer.h"
 
-#ifdef ARDUINO_NRF52832_FEATHER
-#define MCLR 16
-#define DATA 7
-#define CLK  15
-#else // Arduino Nano
-#define MCLR 7
-#define DATA 8
-#define CLK  9
-#endif
-
-#define SIX    0
-#define REGOUT 1
-#define APPID  0xCB
-
-#define SCHECK 0x0 // Sanity Check
-#define READC  0x1 // Read an 8-bit word from the specified Device ID register
-#define READP  0x2 // Read N 24-bit instruction words of code memory starting from the specified address
-#define PROGC  0x4 // Write an 8-bit word to the specified Device ID registers
-#define PROGP  0x5 // Program One Row (64) 24 bit words of Code Memory and Verify
-#define PROGW  0xd // Program One Word of Code Memory and Verify
-#define QBLANK 0xa // Query if the Code Memory is Blank
-#define QVER   0xb // Query the Programming Executive software version
-
-#define PASS 1
-#define FAIL 2
-#define NACK 3
-
 bool in_icsp = false;
+bool in_eicsp = false;
 bool debugging = false; 
 uint32_t page_buffer[64];
 const uint32_t page_buffer_size = sizeof(page_buffer) / sizeof(page_buffer[0]);
-
-typedef union resp
-{
-  struct
-  {
-    uint16_t qe_code : 8;
-    uint16_t last_cmd : 4;
-    uint16_t opcode : 4;
-    uint16_t length;
-  };
-  uint16_t header;
-} resp_t;
 
 void setup() 
 {
@@ -59,7 +21,7 @@ void setup()
 }
 
 void loop()
-{    
+{      
   uint32_t data;
   bool ok;
   String command = readSerial(true);
@@ -71,10 +33,26 @@ void loop()
   
   if(command == "START")
   {
+      ok = enterICSP(false);
+      Serial.println(ok ? "ENTERED_ICSP" : "ERROR");
+  }
+  else if(command == "ENTERICSP") {
     ok = enterICSP(false);
     Serial.println(ok ? "ENTERED_ICSP" : "ERROR");
   }
-  else if(command == "EXIT") {
+  else if(command == "DEBUGON") {
+    debugging = true;
+    Serial.println("DEBUG_ON");
+  }
+  else if(command == "DEBUGOFF") {
+    debugging = false;
+    Serial.println("DEBUG_OFF");
+  }
+  else if(command == "ENTEREICSP") {
+    ok = enterICSP(true);
+    Serial.println(ok ? "ENTERED_EICSP" : "ERROR");
+  }
+  else if(command == "EXITICSP") {
     exitICSP();
     Serial.println("EXITED_ICSP");
   }
@@ -83,11 +61,6 @@ void loop()
     Serial.print("APP_ID=0x");
     Serial.println(data, HEX);
   }
-  else if(command == "TEST") {
-    data = readTest();
-    Serial.print("TEST=");
-    Serial.println(data ? "PASS" : "FAIL");
-  }
   else if(command == "PROGRAM")
   {
     data = readAppId();
@@ -95,17 +68,36 @@ void loop()
       Serial.println("SEND_EXEC");
       return;
     }
-    Serial.println("EXEC_LOADED"); 
+    Serial.println("SEND_APP"); 
   }
   else if(command == "LOADEXEC")
   {
     ok = loadProgrammingExecutive();
     Serial.println(ok ? "EXEC_LOADED" : "ERROR"); 
   }
+  else if(command == "LOADAPP")
+  {
+    ok = loadApplication();
+    Serial.println(ok ? "APP_LOADED" : "ERROR"); 
+  }
+  else if(command == "VERIFYAPP")
+  {
+    ok = verifyApplication();
+    Serial.println(ok ? "APP_VERIFIED" : "ERROR");
+  }
   else if(command == "VERIFYEXEC")
   {
     ok = verifyProgrammingExecutive();
     Serial.println(ok ? "EXEC_VERIFIED" : "ERROR");
+  }
+  else if(command == "EXECVERSION")
+  {
+    uint16_t ver = versionCheck();
+    Serial.print("DATA_OUT:");
+    Serial.print(ver >> 4, HEX);
+    Serial.print(".");
+    Serial.println(ver & 0xf, HEX);
+    Serial.println("EXEC_VERSION");
   }
   else if(command == "DEVICEID")
   {
@@ -113,6 +105,13 @@ void loop()
     Serial.print("DATA_OUT:");
     Serial.println(data, DEC);
     Serial.println("DEVICE_ID");
+  }
+  else if(command == "APPID")
+  {
+    data = readAppId();
+    Serial.print("DATA_OUT:");
+    Serial.println(data, DEC);
+    Serial.println("APP_ID");
   }
   else if(command == "E")
   {
@@ -122,24 +121,52 @@ void loop()
   }
   else if(command == "X")
   {
-    resp_t resp;
-    resp = sendCommand(SCHECK, 1);
-    Serial.print("SCHECK=0x");
-    Serial.println(resp.opcode, HEX);
-        resp = sendCommand(SCHECK, 1);
-    Serial.print("SCHECK LEN=");
-    Serial.println(resp.length, DEC);
-    
-    resp = sendCommand(QVER, 1);
+    bool ok = sanityCheck();
+    Serial.print("SCHECK=");
+    Serial.println(ok);
+
+    uint16_t ver = versionCheck();
     Serial.print("QVER=");
-    Serial.print(resp.qe_code >> 4, HEX);
+    Serial.print(ver >> 4, HEX);
     Serial.print(".");
-    Serial.println(resp.qe_code & 0xf, HEX);
+    Serial.println(ver & 0xf, HEX);
   }
   else if(command == "D") {
     data = readDevId();
     Serial.print("DEV_ID=0x");
     Serial.println(data, HEX);
+  }
+  else if(command == "B") {
+    // 0057FEh (11K) 32
+    // 00ABFEh (22K) 64
+    // 5600
+    ok = blankCheck(0x5600);
+    Serial.print("QBLANK=");
+    Serial.println(ok);
+  }
+  else if(command == "M") {
+    uint16_t mem[10] = {0};
+    ok = readCodeMemory(0, 3, mem);
+    if(ok) {
+      Serial.println(mem[0], HEX);
+      Serial.println(mem[1], HEX);
+      Serial.println(mem[2], HEX);
+      Serial.println(mem[3], HEX);
+      Serial.println(mem[4], HEX);
+      Serial.println(mem[5], HEX);
+    }
+  }
+  else if(command == "W") {
+    ok = writeCodeWord(0, 0x123456);
+    Serial.println(ok ? "OK" : "ERROR");
+  }
+  else if(command == "W-") {
+    eraseBlock(0);
+    Serial.println("EBLK");
+  }
+  else if(command == "EC") {
+    eraseChip();
+    Serial.println("Chip erased!");
   }
 }
 
@@ -153,20 +180,8 @@ String readSerial(bool upperCase) {
   return data;
 }
 
-bool loadProgrammingExecutive()
+bool loadApplication()
 {
-  eraseExec();
-  
-  // Initialize the NVMCON to program 64 instruction words.
-  MOVI(0x4001, W0);
-  MOVW(W0, NVMCON);
-
-  // Initialize TBLPAG and the Write Pointer (W7).
-  MOVI(0x80, W0);
-  MOVW(W0, TBLPAG);
-  CLR(W7, DIRECT);
-  NOP();
-
   while(true) {
     Serial.println("SEND_PAGE");
     String page = readSerial(true);
@@ -174,20 +189,59 @@ bool loadProgrammingExecutive()
       break;
     }
     uint32_t address;
-    if(!readPage(page, &address, page_buffer, page_buffer_size)) {
+    if(!parseHexPage(page, &address, page_buffer, page_buffer_size)) {
       return false;
     }
+    if ((address & 0xffff) % BLOCK_SIZE == 0) {
+      Serial.println("Erase block");
+      eraseBlock(address);
+      Serial.println("Erased");
+    }
+
+    Serial.println("Program page");
     progPage(address, page_buffer);
+    Serial.println("Programmed");
+  }
+  return true;
+}
+
+bool verifyApplication()
+{
+  int pageCount = 0;
+  while(true) {
+    Serial.println("SEND_PAGE");
+    String page = readSerial(true);
+    if (page == "DONE") {
+      break;
+    }
+    uint32_t address;
+    if(!parseHexPage(page, &address, page_buffer, page_buffer_size)) {
+      return false;
+    }
+
+    if(!verifyPage(address, page_buffer)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool loadProgrammingExecutive()
+{
+  eraseExec();
+  
+  while(true) {
+    Serial.println("SEND_PAGE");
+    String page = readSerial(true);
+    if (page == "DONE") {
+      break;
+    }
+    uint32_t address;
+    if(!parseHexPage(page, &address, page_buffer, page_buffer_size)) {
+      return false;
+    }
     
-    // Initiate the programming cycle.
-    BSET(NVMCON, WR);
-    NOP();
-    NOP();
-    pollWR(W2);
-     
-    // Reset the device internal PC. 
-    GOTO(0x200);
-    NOP();
+    progPage(address, page_buffer);
   }
   return true;
 }
@@ -202,7 +256,7 @@ bool verifyProgrammingExecutive()
       break;
     }
     uint32_t address;
-    if(!readPage(page, &address, page_buffer, page_buffer_size)) {
+    if(!parseHexPage(page, &address, page_buffer, page_buffer_size)) {
       return false;
     }
 
@@ -314,7 +368,7 @@ bool verifyPage(uint32_t address, const uint32_t *data)
   return true;
 }
 
-bool readPage(String page, uint32_t *address, uint32_t *data, uint32_t size)
+bool parseHexPage(String page, uint32_t *address, uint32_t *out_data, uint32_t size)
 {
   const char sep = ' ';
   int start = 0;
@@ -337,21 +391,16 @@ bool readPage(String page, uint32_t *address, uint32_t *data, uint32_t size)
       }
       String s = page.substring(start, pos);
       uint32_t temp = strtoul(s.c_str(), 0, 16);
-      data[i] = temp << 24;
-      data[i] |= ((temp << 8) & 0xff0000);
-      data[i] |= ((temp >> 8) & 0xff00);
-      data[i++] |= ((temp >> 24) & 0xff);
+      out_data[i] = temp << 24;
+      out_data[i] |= ((temp << 8) & 0xff0000);
+      out_data[i] |= ((temp >> 8) & 0xff00);
+      out_data[i++] |= ((temp >> 24) & 0xff);
       start = pos + 1;
       pos = page.indexOf(sep, start);
     }
-    
     return true;
   }
   return false;
-}
-
-char hexChar(const char *data) {
-  return *data > '9' ? (*data | 0x20) + 10 - 'a' : *data - '0';
 }
 
 bool enterICSP(bool enhanced)
@@ -361,7 +410,7 @@ bool enterICSP(bool enhanced)
   digitalWrite(LED_BUILTIN, LOW);
   delayMicroseconds(1); // P18 = 40ns
   uint32_t code = enhanced ? 0x4D434850 : 0x4D434851;
-  writeICSP(code);
+  writeToExec(code, 32);
 
   digitalWrite(DATA, LOW);
   digitalWrite(CLK, LOW);
@@ -372,11 +421,11 @@ bool enterICSP(bool enhanced)
   delay(26); // P7 =  25ms
   if (enhanced) {
     in_icsp = true;
-    resp_t r = sendCommand(SCHECK, 1);
-    return r.opcode == PASS && r.length == 2;
+    in_eicsp = true;
+    return sanityCheck();
   }
   uint32_t data = readDevId();
-  return data >= 0x4202 && data <= 0x420f;
+  return (data & 0xff00) == 0x4200; // PIC24 family
 }
 
 void exitICSP()
@@ -386,35 +435,29 @@ void exitICSP()
   digitalWrite(MCLR, LOW);
   digitalWrite(LED_BUILTIN, LOW);
   in_icsp = false;
-}
-
-bool readTest()
-{
-  // Exit Reset vector
-  NOP();
-  GOTO(0x200);
-  NOP();
-  
-  // Load data into VISI
-  const uint16_t TEST_DATA = 0x1234;
-  MOVI(TEST_DATA, W0);
-  MOVW(W0, VISI);
-  NOP();
-
-  // Output the VISI register
-  uint16_t data = regout();
-  NOP();
-  return data == TEST_DATA;
+  in_eicsp = false;
 }
 
 uint16_t readDevId()
 {
-  return readWord(0xff0000);
+  return readId(REG_DEVID);
 }
 
 uint16_t readAppId()
 {
-  return readWord(0x8007f0);
+  return readId(REG_APPID);
+}
+
+uint16_t readId(uint32_t address)
+{
+  if (in_eicsp) {
+    uint16_t id;
+    if(readRegisters(address, 1, &id)) {
+      return id;
+    }
+    return 0;
+  }
+  return readWord(address);
 }
 
 uint16_t readWord(uint32_t address)
@@ -442,10 +485,18 @@ uint16_t readWord(uint32_t address)
 
 void progPage(uint32_t address, uint32_t *data)
 {
-  // Load W0:W5 with the next four words of packed Programming Executive code and initialize W6 for
-  // programming. Programming starts from the base of executive memory (800000h) using W6 as a Read Pointer 
+  // Load W0:W5 with the next four words of packed code and initialize W6 for
+  // programming. Programming starts from address using W6 as a Read Pointer 
   // and W7 as a Write Pointer.
 
+  // Initialize the NVMCON to program 64 instruction words.
+  MOVI(0x4001, W0);
+  MOVW(W0, NVMCON);
+
+  // Initialize TBLPAG and the Write Pointer (W7).
+  MOVI(address >> 16, W0);
+  MOVW(W0, TBLPAG);
+  NOP();
   MOVI(address & 0xffff, W7);
   
   int index = 0;
@@ -494,16 +545,28 @@ void progPage(uint32_t address, uint32_t *data)
     NOP();
     NOP();
   }
+  // Initiate the programming cycle.
+  BSET(NVMCON, WR);
+  NOP();
+  NOP();
+  pollWR(W2);
+   
+  // Reset the device internal PC. 
+  GOTO(0x200);
+  NOP();
 }
 
 void eraseExec()
 {
-  // Exit the Reset vector and erase executive memory.
+  eraseBlock(0x80000);
+  eraseBlock(0x80400);
+  /*
+  // Exit the Reset vector.
   NOP();
   GOTO(0x200);
   NOP();
 
-  // Initialize the NVMCON to erase executive memory.
+  // Initialize the NVMCON to erase memory.
   MOVI(0x4042, W0);
   MOVW(W0, NVMCON);
 
@@ -521,6 +584,53 @@ void eraseExec()
     NOP();
     pollWR(W2);
   }
+  */
+}
+
+void eraseBlock(uint32_t address)
+{
+  // Exit the Reset vector.
+  NOP();
+  GOTO(0x200);
+  NOP();
+
+  // Initialize the NVMCON to erase memory.
+  MOVI(0x4042, W0);
+  MOVW(W0, NVMCON);
+  MOVI(address >> 16, W0);
+  MOVW(W0, TBLPAG);
+  MOVI(address & 0xffff, W1);
+  NOP();
+  TBLWTL(W1, DIRECT, W1, INDIRECT);
+  NOP();
+  NOP();
+  BSET(NVMCON, WR);
+  NOP();
+  NOP();
+  pollWR(W2);
+}
+
+void eraseChip()
+{
+  // Exit the Reset vector.
+  NOP();
+  GOTO(0x200);
+  NOP();
+
+  // Initialize the NVMCON to erase all memory.
+  MOVI(0x404f, W0);
+  MOVW(W0, NVMCON);
+  MOVI(0x00, W0);
+  MOVW(W0, TBLPAG);
+  MOVI(0x0000, W0);
+  TBLWTL(W0, DIRECT, W0, INDIRECT);
+  NOP();
+  NOP();
+  BSET(NVMCON, WR);
+  NOP();
+  NOP();
+  delay(400);
+  pollWR(W2);
 }
 
 void pollWR(uint8_t wreg)
@@ -547,24 +657,122 @@ void write(uint32_t data, int bits)
   }
 }
 
-resp_t sendCommand(uint8_t command, uint16_t length)
+bool sanityCheck()
 {
   resp_t resp;
-  uint32_t data = command;
+  execCommand(SCHECK, 1, NULL, NULL, 1000, &resp);
+  if(resp.opcode == PASS) {
+    return (resp.length == 2);
+  }
+  return false;
+}
+
+bool blankCheck(uint32_t size)
+{
+  resp_t resp;
+  uint16_t input[2];
+  input[0] = size >> 16;
+  input[1] = size & 0xffff;
+  execCommand(QBLANK, 3, input, NULL, 100000, &resp);
+  if(resp.opcode == PASS) {
+    return (resp.qe_code == 0xf0);
+  }
+  return false;
+}
+
+uint16_t versionCheck()
+{
+  resp_t resp;
+  execCommand(QVER, 1, NULL, NULL, 1000, &resp);
+  if(resp.opcode == PASS) {
+    return resp.qe_code;
+  }
+  return 0;
+}
+
+bool readRegisters(uint32_t address, int count, uint16_t *output)
+{
+  resp_t resp;
+  uint16_t input[2];
+  input[0] = count << 8;
+  input[0] |= address >> 16;
+  input[1] = address & 0xffff;
+  execCommand(READC, 3, input, output, 1000, &resp);
+  return(resp.opcode == PASS);
+}
+
+bool writeRegister(uint32_t address, uint16_t data)
+{
+  resp_t resp;
+  uint16_t input[3];
+  input[0] = address >> 16;
+  input[1] = address & 0xffff;
+  input[2] = data;
+  execCommand(PROGC, 4, input, NULL, 5000, &resp);
+  return(resp.opcode == PASS);
+}
+
+bool readCodeMemory(uint32_t address, int count, uint16_t *output)
+{
+  resp_t resp;
+  uint16_t input[3];
+  input[0] = count;
+  input[1] = address >> 16;
+  input[2] = address & 0xffff;
+  execCommand(READP, 4, input, output, 1000 * count, &resp);
+  return(resp.opcode == PASS);
+}
+
+bool writeCodeMemory(uint32_t address, int row, uint16_t *data)
+{
+  resp_t resp;
+  address += row * 0x80;
+  data[0] = address >> 16;
+  data[1] = address & 0xffff;
+  execCommand(PROGP, 0x63, data, NULL, 5000, &resp);
+  return(resp.opcode == PASS);
+}
+
+bool writeCodeWord(uint32_t address, uint32_t data)
+{
+  resp_t resp;
+  uint16_t input[3];
+  input[0] = (data >> 8) & 0xff00;
+  input[0] |= (address >> 16) & 0xff;
+  input[1] = address & 0xffff;
+  input[2] = data & 0xffff;
+  execCommand(PROGW, 4, input, NULL, 5000, &resp);
+  return(resp.opcode == PASS);
+}
+
+void execCommand(uint8_t command, uint16_t length, uint16_t *input, uint16_t *output, uint32_t timeoutMicros, resp_t *resp)
+{
+  uint16_t data = command;
   data <<= 12;
   data |= length & 0xfff;
   writeToExec(data, 16);
+  for(int i = 1; i < length; i++) {
+    writeToExec(input[i - 1], 16);
+  }
   delayMicroseconds(1);
   pinMode(DATA, INPUT);
   delayMicroseconds(12); // P8 12us
   delayMicroseconds(40); // P9 40us
+  while(digitalRead(DATA) == HIGH && timeoutMicros-- > 0) {
+    delayMicroseconds(1);
+  }
   delayMicroseconds(23); // P20 23us
-  resp.header = readFromExec();
-  delayMicroseconds(1); // P21 8ns
-  resp.length = readFromExec();
+  resp->header = readFromExec();
+  delayMicroseconds(8);  // P21 8ns?? typo in data sheet? Needs 8us not ns
+  resp->length = readFromExec();
+  if(resp->opcode == PASS) {
+    for(int i = 2; i < resp->length; i++) {
+      delayMicroseconds(8); // P21 8ns
+      output[i - 2] = readFromExec();
+    }
+  }
   delayMicroseconds(1);
   pinMode(DATA, OUTPUT);
-  return resp;
 }
 
 void writeToExec(uint32_t data, int bits)
@@ -573,6 +781,9 @@ void writeToExec(uint32_t data, int bits)
   for (int i = bits; i >= 0; i--)
   {
     writeBit((data >> i) & 1);
+  }
+  if (debugging) {
+    Serial.println(data, HEX);
   }
 }
 
@@ -588,14 +799,6 @@ uint16_t readFromExec()
     Serial.println(b1, HEX);
   }
   return b1;
-}
-
-void writeICSP(uint32_t data)
-{
-  writeToExec(data, 32);
-  if (debugging) {
-    Serial.println(data, HEX);
-  }
 }
 
 void writeOp(uint32_t op)

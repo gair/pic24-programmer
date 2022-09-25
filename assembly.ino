@@ -1,4 +1,5 @@
-#include "programmer.h"
+
+void writeOp(uint32_t op);
 
 void NOP()
 {
@@ -6,7 +7,14 @@ void NOP()
   writeOp(op);
 }
 
-void CLR(uint8_t wreg, AddrMode addr_mode)
+void DISI(uint16_t cycles)
+{
+  uint32_t op = 0xFC;
+  op |= cycles & 0x3fff;
+  writeOp(op);
+}
+
+void CLR(uint8_t wreg, addressing_mode_t addr_mode)
 {
   uint32_t op = 0xEB;
   op <<= 5;
@@ -28,17 +36,17 @@ void BSET(uint16_t addr, uint8_t bit4)
   writeOp(op);
 }
 
-void TBLWTL(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode)
+void TBLWTL(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode)
 {
   TBLWTL_Base(wreg_src, src_mode, wreg_dest, dest_mode, 0);
 }
 
-void TBLWTLB(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode)
+void TBLWTLB(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode)
 {
   TBLWTL_Base(wreg_src, src_mode, wreg_dest, dest_mode, 1);
 }
 
-void TBLWTL_Base(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode, uint8_t byte_mode)
+void TBLWTL_Base(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode, uint8_t byte_mode)
 {
   uint32_t op = 0xBB0;
   op |= (byte_mode & 0x1) << 2;
@@ -52,17 +60,17 @@ void TBLWTL_Base(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMod
   writeOp(op);
 }
 
-void TBLWTH(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode)
+void TBLWTH(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode)
 {
   TBLWTH_Base(wreg_src, src_mode, wreg_dest, dest_mode, 0);
 }
 
-void TBLWTHB(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode)
+void TBLWTHB(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode)
 {
   TBLWTH_Base(wreg_src, src_mode, wreg_dest, dest_mode, 1);
 }
 
-void TBLWTH_Base(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode, uint8_t byte_mode)
+void TBLWTH_Base(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode, uint8_t byte_mode)
 {
   uint32_t op = 0xBB8;
   op |= (byte_mode & 0x1) << 2;
@@ -76,17 +84,17 @@ void TBLWTH_Base(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMod
   writeOp(op);
 }
 
-void TBLRDL(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode)
+void TBLRDL(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode)
 {
   TBLRDL_Base(wreg_src, src_mode, wreg_dest, dest_mode, 0);
 }
 
-void TBLRDLB(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode)
+void TBLRDLB(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode)
 {
   TBLRDL_Base(wreg_src, src_mode, wreg_dest, dest_mode, 1);
 }
 
-void TBLRDL_Base(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode, uint8_t byte_mode)
+void TBLRDL_Base(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode, uint8_t byte_mode)
 {
   uint32_t op = 0xBA0;
   op |= (byte_mode & 0x1) << 2;
@@ -100,17 +108,17 @@ void TBLRDL_Base(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMod
   writeOp(op);
 }
 
-void TBLRDH(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode)
+void TBLRDH(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode)
 {
   TBLRDH_Base(wreg_src, src_mode, wreg_dest, dest_mode, 0);
 }
 
-void TBLRDHB(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode)
+void TBLRDHB(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode)
 {
   TBLRDH_Base(wreg_src, src_mode, wreg_dest, dest_mode, 1);
 }
 
-void TBLRDH_Base(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMode dest_mode, uint8_t byte_mode)
+void TBLRDH_Base(uint8_t wreg_src, addressing_mode_t src_mode, uint8_t wreg_dest, addressing_mode_t dest_mode, uint8_t byte_mode)
 {
   uint32_t op = 0xBA8;
   op |= (byte_mode & 0x1) << 2;
@@ -124,6 +132,7 @@ void TBLRDH_Base(uint8_t wreg_src, AddrMode src_mode, uint8_t wreg_dest, AddrMod
   writeOp(op);
 }
 
+// Move immediate data to working register
 void MOVI(uint16_t data, uint8_t wreg)
 {
   uint32_t op = 0x2;
@@ -134,6 +143,7 @@ void MOVI(uint16_t data, uint8_t wreg)
   writeOp(op);
 }
 
+// Move working register to file
 void MOVW(uint8_t wreg, uint16_t addr)
 {
   uint32_t op = 0x88;
@@ -144,6 +154,7 @@ void MOVW(uint8_t wreg, uint16_t addr)
   writeOp(op);
 }
 
+// Move file to working register
 void MOVF(uint16_t addr, uint8_t wreg)
 {
   uint32_t op = 0x80;
