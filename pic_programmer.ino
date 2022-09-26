@@ -26,15 +26,39 @@ void loop()
   bool ok;
   String command = readSerial(true);
 
-  if(command == "START_DEBUG") {
-    command = "START";
-    debugging = true;
-  }
-  
-  if(command == "START")
+  if(command == "INIT")
   {
-      ok = enterICSP(false);
-      Serial.println(ok ? "ENTERED_ICSP" : "ERROR");
+    debugging = false;
+    exitICSP();
+    Serial.println("INITIALIZED");
+  }
+  else if(command == "BLANKCHECK") {
+    ok = executeBlankCheck();
+    Serial.print("DATA_OUT:");
+    Serial.println(ok ? 1 : 0);
+    Serial.println("BLANK_CHECK");
+  }
+  else if(command == "READWORD") {
+    data = executeReadMemoryWord();
+    Serial.print("DATA_OUT:");
+    Serial.println(data);
+    Serial.println("READ_WORD");
+  }
+  else if(command == "READPAGE") {
+    executeReadMemoryPage();
+    Serial.println("READ_PAGE");
+  }
+  else if(command == "ERASEBLOCK") {
+    executeBlockErase();
+    Serial.println("ERASE_BLOCK");
+  }
+  else if(command == "ERASECHIP") {
+    eraseChip();
+    Serial.println("ERASE_CHIP");
+  }
+  else if(command == "ERASEEXEC") {
+    eraseExec();
+    Serial.println("ERASE_EXEC");
   }
   else if(command == "ENTERICSP") {
     ok = enterICSP(false);
@@ -61,14 +85,13 @@ void loop()
     Serial.print("APP_ID=0x");
     Serial.println(data, HEX);
   }
-  else if(command == "PROGRAM")
+  else if(command == "FLASHAPP")
   {
-    data = readAppId();
-    if (data != APPID) {
-      Serial.println("SEND_EXEC");
-      return;
-    }
     Serial.println("SEND_APP"); 
+  }
+  else if(command == "FLASHEXEC")
+  {
+    Serial.println("SEND_EXEC"); 
   }
   else if(command == "LOADEXEC")
   {
@@ -180,6 +203,50 @@ String readSerial(bool upperCase) {
   return data;
 }
 
+bool executeBlankCheck()
+{
+  Serial.println("BLANK_SIZE");
+  String hexSize = readSerial(true);
+  uint32_t size = strtoul(hexSize.c_str(), 0, 16);
+  return blankCheck(size);
+}
+
+void executeBlockErase()
+{
+  Serial.println("BLOCK_ADDR");
+  String hexAddr = readSerial(true);
+  uint32_t addr = strtoul(hexAddr.c_str(), 0, 16);
+  eraseBlock(addr);
+}
+
+int executeReadMemoryWord()
+{
+  Serial.println("WORD_ADDR");
+  String hexAddr = readSerial(true);
+  uint32_t addr = strtoul(hexAddr.c_str(), 0, 16);
+  return readWord(addr);
+}
+
+void executeReadMemoryPage() {
+  Serial.println("PAGE_ADDR");
+  String hexAddr = readSerial(true);
+  uint32_t addr = strtoul(hexAddr.c_str(), 0, 16);
+  uint32_t addr_offset = 0;
+  for (int index = 0; index < 64; index += 2) {
+    readMemory(addr + addr_offset, &page_buffer[index], &page_buffer[index + 1]);
+    addr_offset += 4;
+  }
+  
+  String hex = "";
+  for (int i = 0; i < 64; i++)
+  {
+    hex += ' ' + String(page_buffer[i], HEX);
+  }
+  
+  Serial.print("TEXT_OUT:");
+  Serial.println(hex.c_str());
+}
+
 bool loadApplication()
 {
   while(true) {
@@ -192,22 +259,13 @@ bool loadApplication()
     if(!parseHexPage(page, &address, page_buffer, page_buffer_size)) {
       return false;
     }
-    if ((address & 0xffff) % BLOCK_SIZE == 0) {
-      Serial.println("Erase block");
-      eraseBlock(address);
-      Serial.println("Erased");
-    }
-
-    Serial.println("Program page");
     progPage(address, page_buffer);
-    Serial.println("Programmed");
   }
   return true;
 }
 
 bool verifyApplication()
 {
-  int pageCount = 0;
   while(true) {
     Serial.println("SEND_PAGE");
     String page = readSerial(true);
@@ -228,7 +286,7 @@ bool verifyApplication()
 
 bool loadProgrammingExecutive()
 {
-  eraseExec();
+  void eraseExec();
   
   while(true) {
     Serial.println("SEND_PAGE");
@@ -478,9 +536,9 @@ uint16_t readWord(uint32_t address)
   NOP();
 
   // Output the VISI register using the REGOUT command
-  uint16_t id = regout(); // Clock out contents of the VISI register.
+  uint16_t data = regout(); // Clock out contents of the VISI register.
   NOP();
-  return id;
+  return data;
 }
 
 void progPage(uint32_t address, uint32_t *data)
@@ -498,6 +556,7 @@ void progPage(uint32_t address, uint32_t *data)
   MOVW(W0, TBLPAG);
   NOP();
   MOVI(address & 0xffff, W7);
+  NOP();
   
   int index = 0;
   for(int i = 0; i < 16; i++)
@@ -560,34 +619,19 @@ void eraseExec()
 {
   eraseBlock(0x80000);
   eraseBlock(0x80400);
-  /*
-  // Exit the Reset vector.
-  NOP();
-  GOTO(0x200);
-  NOP();
-
-  // Initialize the NVMCON to erase memory.
-  MOVI(0x4042, W0);
-  MOVW(W0, NVMCON);
-
-  // Initialize Erase Pointers to the page of the executive and then initiate the erase cycle.
-  for(uint16_t addr = 0; addr <= 0x400; addr += 0x400) {
-    MOVI(0x80, W0);
-    MOVW(W0, TBLPAG);
-    MOVI(addr, W1);
-    NOP();
-    TBLWTL(W1, DIRECT, W1, INDIRECT);
-    NOP();
-    NOP();
-    BSET(NVMCON, WR);
-    NOP();
-    NOP();
-    pollWR(W2);
-  }
-  */
 }
 
 void eraseBlock(uint32_t address)
+{
+  eraseMemory(address, false);
+}
+
+void eraseChip()
+{
+  eraseMemory(0, true);
+}
+
+void eraseMemory(uint32_t address, bool chipErase)
 {
   // Exit the Reset vector.
   NOP();
@@ -595,7 +639,8 @@ void eraseBlock(uint32_t address)
   NOP();
 
   // Initialize the NVMCON to erase memory.
-  MOVI(0x4042, W0);
+  uint16_t mode = chipErase ? 0x404f : 0x4042;
+  MOVI(mode, W0);
   MOVW(W0, NVMCON);
   MOVI(address >> 16, W0);
   MOVW(W0, TBLPAG);
@@ -607,38 +652,18 @@ void eraseBlock(uint32_t address)
   BSET(NVMCON, WR);
   NOP();
   NOP();
-  pollWR(W2);
-}
-
-void eraseChip()
-{
-  // Exit the Reset vector.
-  NOP();
-  GOTO(0x200);
-  NOP();
-
-  // Initialize the NVMCON to erase all memory.
-  MOVI(0x404f, W0);
-  MOVW(W0, NVMCON);
-  MOVI(0x00, W0);
-  MOVW(W0, TBLPAG);
-  MOVI(0x0000, W0);
-  TBLWTL(W0, DIRECT, W0, INDIRECT);
-  NOP();
-  NOP();
-  BSET(NVMCON, WR);
-  NOP();
-  NOP();
-  delay(400);
+  if (chipErase) {
+    delay(400);
+  }
   pollWR(W2);
 }
 
 void pollWR(uint8_t wreg)
 {
   // Poll the WR bit (bit 15 of NVMCON) until it is cleared by the hardware.
-  uint16_t wr = 1 << WR;
-  uint16_t data = wr;
-  while((data & wr) != 0) {
+  uint16_t wr_mask = 1 << WR;
+  uint16_t data = wr_mask;
+  while((data & wr_mask) != 0) {
     GOTO(0x200);
     NOP();
     MOVF(NVMCON, wreg);
