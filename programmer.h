@@ -15,7 +15,8 @@
 #define APPID     0xCB
 #define REG_DEVID 0xff0000
 #define REG_APPID 0x8007f0
-#define BLOCK_SIZE 0x400
+#define EXEC_ADDR 0x800000
+#define ERASE_BLOCK_SIZE 0x400
 
 #define SCHECK    0x0 // Sanity Check
 #define READC     0x1 // Read an 8-bit word from the specified Device ID register
