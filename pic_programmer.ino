@@ -80,6 +80,7 @@ void loop()
   }
   else if(command == "DEBUGON") {
     debugging = true;
+    Serial.println(in_eicsp ? "EICSP mode" : (in_icsp ? "ICSP mode" : ""));
     Serial.println("DEBUG_ON");
   }
   else if(command == "DEBUGOFF") {
@@ -144,6 +145,11 @@ void loop()
     Serial.print("DATA_OUT:");
     Serial.println(data, DEC);
     Serial.println("APP_ID");
+  }
+  else if(command == "RESETMCU")
+  {
+    reset();
+    Serial.println("RESET_MCU");
   }
 }
 
@@ -369,7 +375,7 @@ bool verifyProgramExecutive()
     if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
       return false;
     }
-    if(!verifyPage(address, page_buffer) && false) {
+    if(!verifyPage(address, page_buffer)) {
       Serial.println("VERIFY_FAIL");
       return false;
     }
@@ -582,6 +588,16 @@ void exitICSP()
   digitalWrite(CLK, LOW);
   digitalWrite(MCLR, LOW);
   digitalWrite(LED_BUILTIN, LOW);
+  in_icsp = false;
+  in_eicsp = false;
+}
+
+void reset()
+{
+  digitalWrite(MCLR, LOW);
+  delayMicroseconds(2);
+  digitalWrite(MCLR, HIGH);
+  digitalWrite(LED_BUILTIN, HIGH);
   in_icsp = false;
   in_eicsp = false;
 }
@@ -914,6 +930,7 @@ uint16_t readFromExec()
     b1 |= b0 << i;
   }
   if (debugging) {
+    Serial.print("->");
     Serial.println(b1, HEX);
   }
   return b1;
@@ -951,6 +968,7 @@ uint16_t regout()
   pinMode(DATA, OUTPUT);
   delayMicroseconds(1); // P4A = 40ns
   if (debugging) {
+    Serial.print("->");
     Serial.println(value, HEX);
   }
   return value;
