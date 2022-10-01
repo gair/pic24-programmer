@@ -286,7 +286,9 @@ bool eraseMemoryBlocks()
 bool eraseAllUserMemory()
 {
   if (in_eicsp) {
-    return eraseChipEx();
+    //return eraseChipEx(); // disabling as it's unreliable
+    Serial.println(CmdWrongMode); 
+    return false;
   }
   eraseChip();
   return true;

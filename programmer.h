@@ -26,7 +26,7 @@
 #define PROGW     0xd // Program One Word of Code Memory and Verify
 #define QBLANK    0xa // Query if the Code Memory is Blank
 #define QVER      0xb // Query the Programming Executive software version
-#define ERASEB    0x7 // Bulk erase entire chip (Undocumented but working) 
+#define ERASEB    0x7 // Bulk erase entire chip (Undocumented and not always working) 
 #define ERASEP    0x9 // Erase page(s) (Undocumented but working) 
 #define CRCP      0xc // CRC-16 calculation (Undocumented, untested) 
 
