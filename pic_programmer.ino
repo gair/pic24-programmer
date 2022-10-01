@@ -5,9 +5,8 @@ bool in_icsp = false;
 bool in_eicsp = false;
 bool debugging = false; 
 uint32_t page_buffer[64];
-uint16_t code_buffer[98];
 const uint32_t page_buffer_size = sizeof(page_buffer) / sizeof(page_buffer[0]);
-const uint32_t code_buffer_size = sizeof(code_buffer) / sizeof(code_buffer[0]);
+uint16_t code_buffer[(page_buffer_size * 3) / 2 + 2];
 
 void setup() 
 {
@@ -18,338 +17,168 @@ void setup()
   
   exitICSP();
   
-  Serial.begin(9600);
-  Serial.println("RESET");
+  Serial.begin(115200);
+  Serial.println(CmdReset);
 }
 
 void loop()
 {      
   uint32_t data;
   bool ok;
-  String command = readSerial(true);
+  String command = readSerial();
 
-  if(command == "INITIALIZE")
+  if(command == CmdInitialize)
   {
     debugging = false;
     exitICSP();
-    Serial.println("INITIALIZE");
+    Serial.println(CmdInitialize);
   }
-  else if(command == "BLANKCHECK") {
-    ok = executeBlankCheck();
-    Serial.print("DATA_OUT:");
+  else if(command == CmdBlankCheck) {
+    ok = memoryBlankCheck();
+    Serial.print(CmdDataOut);
     Serial.println(ok ? 1 : 0);
-    Serial.println("BLANK_CHECK");
+    Serial.println(CmdBlankCheck);
   }
-  else if(command == "READWORD") {
-    data = executeReadMemoryWord();
-    Serial.print("DATA_OUT:");
+  else if(command == CmdReadWord) {
+    data = readMemoryWord();
+    Serial.print(CmdDataOut);
     Serial.println(data);
-    Serial.println("READ_WORD");
+    Serial.println(CmdReadWord);
   }
-  else if(command == "READPAGE") {
-    executeReadMemoryPage();
-    Serial.println("READ_PAGE");
+  else if(command == CmdReadPage) {
+    readMemoryPage();
+    Serial.println(CmdReadPage);
   }
-  else if(command == "READPAGEEX") {
-    executeReadMemoryPageWithExec();
-    Serial.println("READ_PAGE_EX");
+  else if(command == CmdEraseBlocks) {
+    ok = eraseMemoryBlocks();
+    Serial.println(ok ? CmdEraseBlocks : CmdError);
   }
-  else if(command == "ERASEBLOCK") {
-    executeBlockErase();
-    Serial.println("ERASE_BLOCK");
+  else if(command == CmdEraseChip) {
+    ok = eraseAllUserMemory();
+    Serial.println(ok ? CmdEraseChip : CmdError);
   }
-  else if(command == "ERASECHIP") {
-    eraseChip();
-    Serial.println("ERASE_CHIP");
+  else if(command == CmdEraseExec) {
+    eraseExecBlock();
+    Serial.println(CmdEraseExec);
   }
-  else if(command == "ERASEEXEC") {
-    eraseExec();
-    Serial.println("ERASE_EXEC");
-  }
-  else if(command == "ENTERICSP") {
+  else if(command == CmdEnterICSP) {
     ok = enterICSP(false);
-    Serial.println(ok ? "ENTER_ICSP" : "ERROR");
+    Serial.println(ok ? CmdEnterICSP : CmdError);
   }
-  else if(command == "ENTEREICSP") {
+  else if(command == CmdEnterEICSP) {
     ok = enterICSP(true);
-    Serial.println(ok ? "ENTER_EICSP" : "ERROR");
+    Serial.println(ok ? CmdEnterEICSP : CmdError);
   }
-  else if(command == "EXITICSP") {
+  else if(command == CmdExitICSP) {
     exitICSP();
-    Serial.println("EXIT_ICSP");
+    Serial.println(CmdExitICSP);
   }
-  else if(command == "DEBUGON") {
+  else if(command == CmdDebugEnable) {
     debugging = true;
-    Serial.println(in_eicsp ? "EICSP mode" : (in_icsp ? "ICSP mode" : ""));
-    Serial.println("DEBUG_ON");
+    Serial.println(in_eicsp ? "In EICSP" : (in_icsp ? "In ICSP" : ""));
+    Serial.println(CmdDebugEnable);
   }
-  else if(command == "DEBUGOFF") {
+  else if(command == CmdDebugDisable) {
     debugging = false;
-    Serial.println("DEBUG_OFF");
+    Serial.println(CmdDebugDisable);
   }
-  else if(command == "REQUESTAPP")
+  else if(command == CmdRequestApp)
   {
-    Serial.println("SEND_APP"); 
+    Serial.println(CmdRequestApp); 
   }
-  else if(command == "REQUESTEXEC")
+  else if(command == CmdRequestExec)
   {
-    Serial.println("SEND_EXEC"); 
+    Serial.println(CmdRequestExec); 
   }
-  else if(command == "LOADEXEC")
+  else if(command == CmdLoadExec)
   {
     ok = loadProgramExecutive();
-    Serial.println(ok ? "LOAD_EXEC" : "ERROR"); 
+    Serial.println(ok ? CmdLoadExec : CmdError); 
   }
-  else if(command == "LOADAPP")
+  else if(command == CmdLoadApp)
   {
     ok = loadApplication();
-    Serial.println(ok ? "LOAD_APP" : "ERROR"); 
+    Serial.println(ok ? CmdLoadApp : CmdError); 
   }
-  else if(command == "LOADAPPEX")
-  {
-    ok = loadApplicationWithExec();
-    Serial.println(ok ? "LOAD_APP" : "ERROR"); 
-  }
-  else if(command == "VERIFYAPP")
+  else if(command == CmdVerifyApp)
   {
     ok = verifyApplication();
-    Serial.println(ok ? "VERIFY_APP" : "ERROR");
+    Serial.println(ok ? CmdVerifyApp : CmdError);
   }
-  else if(command == "VERIFYAPPEX")
-  {
-    ok = verifyApplicationWithExec();
-    Serial.println(ok ? "VERIFY_APP" : "ERROR");
-  }
-  else if(command == "VERIFYEXEC")
+  else if(command == CmdVerifyExec)
   {
     ok = verifyProgramExecutive();
-    Serial.println(ok ? "VERIFY_EXEC" : "ERROR");
+    Serial.println(ok ? CmdVerifyExec : CmdError);
   }
-  else if(command == "EXECVERSION")
+  else if(command == CmdExecVersion)
   {
-    data = executiveVersion();
-    Serial.print("DATA_OUT:");
+    data = readExecVersion();
+    Serial.print(CmdDataOut);
     Serial.println(data, DEC);
-    Serial.println("EXEC_VERSION");
+    Serial.println(CmdExecVersion);
   }
-  else if(command == "DEVICEID")
+  else if(command == CmdDeviceID)
   {
     data = readDevId();
-    Serial.print("DATA_OUT:");
+    Serial.print(CmdDataOut);
     Serial.println(data, DEC);
-    Serial.println("DEVICE_ID");
+    Serial.println(CmdDeviceID);
   }
-  else if(command == "APPID")
+  else if(command == CmdAppID)
   {
     data = readAppId();
-    Serial.print("DATA_OUT:");
+    Serial.print(CmdDataOut);
     Serial.println(data, DEC);
-    Serial.println("APP_ID");
+    Serial.println(CmdAppID);
   }
-  else if(command == "RESETMCU")
+  else if(command == CmdMemoryCRC)
+  {
+    ok = calculateMemoryCRC();
+    if (!ok) {
+      Serial.println(CmdError);
+    }
+    else {
+      Serial.print(CmdDataOut);
+      Serial.println(code_buffer[0], DEC);
+      Serial.println(CmdMemoryCRC);
+    }
+  }
+  else if(command == CmdResetMCU)
   {
     reset();
-    Serial.println("RESET_MCU");
+    Serial.println(CmdResetMCU);
   }
 }
 
-String readSerial(bool upperCase) {
-  while(Serial.available() == 0);
-  String data = Serial.readString();
-  if (upperCase) {
-    data.toUpperCase();
+// ICSP functions
+
+bool calculateMemoryCRC() {
+  if(in_eicsp) {
+    Serial.println(CmdMemoryAddr);
+    String hexAddr = readSerial();
+    uint32_t address = strtoul(hexAddr.c_str(), 0, 16);
+    Serial.println(CmdMemorySize);
+    String hexSize = readSerial();
+    uint32_t size = strtoul(hexSize.c_str(), 0, 16);
+    return calculateCRC(address, size, code_buffer);
+  } else {
+    Serial.println(CmdWrongMode);
+    return false;
   }
-  data.trim();
-  return data;
-}
-
-bool executeBlankCheck()
-{
-  Serial.println("BLANK_SIZE");
-  String hexSize = readSerial(true);
-  uint32_t size = strtoul(hexSize.c_str(), 0, 16);
-  return blankCheck(size);
-}
-
-void executeBlockErase()
-{
-  Serial.println("MEMORY_ADDR");
-  String hexAddr = readSerial(true);
-  uint32_t addr = strtoul(hexAddr.c_str(), 0, 16);
-  eraseBlock(addr);
-}
-
-int executeReadMemoryWord()
-{
-  Serial.println("MEMORY_ADDR");
-  String hexAddr = readSerial(true);
-  uint32_t addr = strtoul(hexAddr.c_str(), 0, 16);
-  return readWord(addr);
-}
-
-void executeReadMemoryPage() {
-  Serial.println("MEMORY_ADDR");
-  String hexAddr = readSerial(true);
-  uint32_t address = strtoul(hexAddr.c_str(), 0, 16);
-  uint32_t offset = 0;
-  
-  for (int index = 0; index < 64; index += 2) {
-    readMemory(address + offset, &page_buffer[index], &page_buffer[index + 1]);
-    offset += 4;
-  }
-  
-  sendPageBuffer();
-}
-
-void executeReadMemoryPageWithExec() {
-  Serial.println("MEMORY_ADDR");
-  String hexAddr = readSerial(true);
-  uint32_t address = strtoul(hexAddr.c_str(), 0, 16);
-
-  readCodeMemory(address, 64, code_buffer);
-
-  int n = 0;
-  for (int i = 0; i < 64; i += 2) {
-    unpackTwoWords(&code_buffer[n], &page_buffer[i]);
-    n += 3;
-  }
-  
-  sendPageBuffer();
-}
-
-void sendPageBuffer() {
-  String hex = "";
-  for (int i = 0; i < 64; i++)
-  {
-    hex += ' ' + String(page_buffer[i], HEX);
-  }
-  hex.trim();
-  Serial.print("TEXT_OUT:");
-  Serial.println(hex.c_str());
-}
-
-void unpackTwoWords(uint16_t *packed, uint32_t *unpacked)
-{
-  unpacked[0] = packed[1] & 0xff;
-  unpacked[0] <<= 16;
-  unpacked[0] |= packed[0];
-  unpacked[1] = packed[1] & 0xff00;
-  unpacked[1] <<= 8;
-  unpacked[1] |= packed[2];
-}
-
-void packTwoWords(uint32_t *unpacked, uint16_t *packed)
-{
-  packed[0] = unpacked[0] & 0xffff;
-  packed[1] = (unpacked[0] >> 16) & 0xff;
-  packed[1] |= (unpacked[1] >> 8) & 0xff00;
-  packed[2] = unpacked[1] & 0xffff;
-}
-
-bool loadApplication()
-{
-  while(true) {
-    Serial.println("SEND_PAGE");
-    String page = readSerial(true);
-    if (page == "NOPAGES") {
-      break;
-    }
-    uint32_t address;
-    if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
-      return false;
-    }
-
-    progPage(address, page_buffer);
-  }
-  return true;
-}
-
-bool loadApplicationWithExec()
-{
-  while(true) {
-    Serial.println("SEND_PAGE");
-    String page = readSerial(true);
-    if (page == "NOPAGES") {
-      break;
-    }
-    uint32_t address;
-    if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
-      Serial.println("parse failed");
-      return false;
-    }
-    
-    int n = 2;
-    for (int i = 0; i < 64; i += 2) {
-      packTwoWords(&page_buffer[i], &code_buffer[n]);
-      n += 3;
-    }
-    
-    if(!writeCodeMemory(address, 0, code_buffer)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool verifyApplicationWithExec()
-{
-  while(true) {
-    Serial.println("SEND_PAGE");
-    String page = readSerial(true);
-    if (page == "NOPAGES") {
-      break;
-    }
-    uint32_t address;
-    if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
-      return false;
-    }
-    
-    if(!readCodeMemory(address, 64, code_buffer)) {
-      return false;
-    }
-
-    int n = 0;
-    uint32_t unpacked[2]; 
-    for (int i = 0; i < 64; i += 2) {
-      unpackTwoWords(&code_buffer[n], unpacked);
-      if(unpacked[0] != page_buffer[i] || unpacked[1] != page_buffer[i + 1]) {
-        Serial.println("VERIFY_FAIL");
-        return false;
-      }
-      n += 3;
-    }
-  }
-  return true;
-}
-
-bool verifyApplication()
-{
-  while(true) {
-    Serial.println("SEND_PAGE");
-    String page = readSerial(true);
-    if (page == "NOPAGES") {
-      break;
-    }
-    uint32_t address;
-    if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
-      return false;
-    }
-
-    if(!verifyPage(address, page_buffer)) {
-      return false;
-    }
-  }
-  return true;
 }
 
 bool loadProgramExecutive()
 {
-  eraseExec();
+  if(in_eicsp) {
+    Serial.println(CmdWrongMode);
+    return false;
+  }
+  eraseExecBlock();
   
   while(true) {
-    Serial.println("SEND_PAGE");
-    String page = readSerial(true);
-    if (page == "NOPAGES") {
+    Serial.println(CmdSendPage);
+    String page = readSerial();
+    if (page == CmdNoPages) {
       break;
     }
     uint32_t address;
@@ -366,9 +195,9 @@ bool verifyProgramExecutive()
 {
   int pageCount = 0;
   while(true) {
-    Serial.println("SEND_PAGE");
-    String page = readSerial(true);
-    if (page == "NOPAGES") {
+    Serial.println(CmdSendPage);
+    String page = readSerial();
+    if (page == CmdNoPages) {
       break;
     }
     uint32_t address;
@@ -376,12 +205,117 @@ bool verifyProgramExecutive()
       return false;
     }
     if(!verifyPage(address, page_buffer)) {
-      Serial.println("VERIFY_FAIL");
+      Serial.println(CmdVerifyFail);
       return false;
     }
     pageCount++;
   }
   return (pageCount == 16);
+}
+
+bool loadApplication()
+{
+  if(in_eicsp) {
+    return loadApplicationEx();
+  }
+  
+  while(true) {
+    Serial.println(CmdSendPage);
+    String page = readSerial();
+    if (page == CmdNoPages) {
+      break;
+    }
+    uint32_t address;
+    if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
+      return false;
+    }
+
+    progPage(address, page_buffer);
+  }
+  return true;
+}
+
+bool verifyApplication()
+{
+  if(in_eicsp) {
+    return verifyApplicationEx();
+  }
+  
+  while(true) {
+    Serial.println(CmdSendPage);
+    String page = readSerial();
+    if (page == CmdNoPages) {
+      break;
+    }
+    uint32_t address;
+    if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
+      return false;
+    }
+
+    if(!verifyPage(address, page_buffer)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void eraseExecBlock()
+{
+  if(in_eicsp) {
+    erasePages(EXEC_ADDR, 2);
+    return;
+  }
+  eraseBlocks(EXEC_ADDR, 2);
+}
+
+bool eraseMemoryBlocks()
+{
+  Serial.println(CmdMemoryAddr);
+  String hexAddr = readSerial();
+  uint32_t addr = strtoul(hexAddr.c_str(), 0, 16);
+  Serial.println(CmdNumPages);
+  String pages = readSerial();
+  uint16_t numPages = strtoul(pages.c_str(), 0, 10);
+  if (in_eicsp) {
+    return erasePages(addr, numPages);
+  }
+  eraseBlocks(addr, numPages);
+  return true;
+}
+
+bool eraseAllUserMemory()
+{
+  if (in_eicsp) {
+    return eraseChipEx();
+  }
+  eraseChip();
+  return true;
+}
+
+int readMemoryWord()
+{
+  Serial.println(CmdMemoryAddr);
+  String hexAddr = readSerial();
+  uint32_t addr = strtoul(hexAddr.c_str(), 0, 16);
+  return readWord(addr);
+}
+
+void readMemoryPage() {
+  if(in_eicsp) {
+    readMemoryPageEx();
+    return;
+  }
+  Serial.println(CmdMemoryAddr);
+  String hexAddr = readSerial();
+  uint32_t address = strtoul(hexAddr.c_str(), 0, 16);
+  uint32_t offset = 0;
+  
+  for (int index = 0; index < 64; index += 2) {
+    readMemory(address + offset, &page_buffer[index], &page_buffer[index + 1]);
+    offset += 4;
+  }
+  
+  sendPageHex();
 }
 
 void readMemory(uint32_t address, uint32_t *word0, uint32_t *word1)
@@ -484,146 +418,6 @@ bool verifyPage(uint32_t address, const uint32_t *data)
   return true;
 }
 
-bool parseHexPage24(String page, uint32_t *address, uint32_t *out_data, uint32_t size)
-{
-  const char sep = ' ';
-  int start = 0;
-  int length = page.length();
-  int pos = page.indexOf(sep);
-  if (pos > 0) {
-    String addr = page.substring(start, pos);
-    int col = addr.indexOf(':');
-    if (col != -1) {
-      addr[col] = '\0';
-    }
-    *address = strtoul(addr.c_str(), 0, 16);
-    start = pos + 1;
-    pos = page.indexOf(sep, start);
-    int i = 0;
-    bool done = false;
-    while(!done) {
-      if(i >= size || start >= length) {
-        return false;
-      }
-      if(pos == -1) {
-        done = true;
-        pos = length;
-      }
-      String s = page.substring(start, pos);
-      out_data[i++] = strtoul(s.c_str(), 0, 16);
-      start = pos + 1;
-      pos = page.indexOf(sep, start);
-    }
-    return true;
-  }
-  return false;
-}
-
-bool parseHexPage32(String page, uint32_t *address, uint32_t *out_data, uint32_t size)
-{
-  const char sep = ' ';
-  int start = 0;
-  int length = page.length();
-  int pos = page.indexOf(sep);
-  if (pos > 0) {
-    String addr = page.substring(start, pos);
-    int col = addr.indexOf(':');
-    if (col != -1) {
-      addr[col] = '\0';
-    }
-    *address = strtoul(addr.c_str(), 0, 16) >> 1;
-    start = pos + 1;
-    pos = page.indexOf(sep, start);
-    int i = 0;
-    bool done = false;
-    while(!done) {
-      if(i >= size || start >= length) {
-        return false;
-      }
-      if(pos == -1) {
-        done = true;
-        pos = length;
-      }
-      String s = page.substring(start, pos);
-      uint32_t temp = strtoul(s.c_str(), 0, 16);
-      out_data[i] = temp << 24;
-      out_data[i] |= ((temp << 8) & 0xff0000);
-      out_data[i] |= ((temp >> 8) & 0xff00);
-      out_data[i++] |= ((temp >> 24) & 0xff);
-      start = pos + 1;
-      pos = page.indexOf(sep, start);
-    }
-    return true;
-  }
-  return false;
-}
-
-bool enterICSP(bool enhanced)
-{
-  digitalWrite(MCLR, HIGH);
-  digitalWrite(MCLR, LOW);
-  delayMicroseconds(1); // P18 = 40ns
-  uint32_t code = enhanced ? 0x4D434850 : 0x4D434851;
-  writeToExec(code, 32);
-
-  digitalWrite(DATA, LOW);
-  digitalWrite(CLK, LOW);
-
-  delay(2);  // P19 = 1ms
-  digitalWrite(MCLR, HIGH);
-  digitalWrite(LED_BUILTIN, HIGH);
-  delay(26); // P7 =  25ms
-  if (enhanced) {
-    in_icsp = true;
-    in_eicsp = true;
-    return sanityCheck();
-  }
-  uint32_t data = readDevId();
-  return (data & 0xff00) == 0x4200; // PIC24 family
-}
-
-void exitICSP()
-{
-  digitalWrite(DATA, LOW);
-  digitalWrite(CLK, LOW);
-  digitalWrite(MCLR, LOW);
-  digitalWrite(LED_BUILTIN, LOW);
-  in_icsp = false;
-  in_eicsp = false;
-}
-
-void reset()
-{
-  digitalWrite(MCLR, LOW);
-  delayMicroseconds(2);
-  digitalWrite(MCLR, HIGH);
-  digitalWrite(LED_BUILTIN, HIGH);
-  in_icsp = false;
-  in_eicsp = false;
-}
-
-uint16_t readDevId()
-{
-  return readId(REG_DEVID);
-}
-
-uint16_t readAppId()
-{
-  return readId(REG_APPID);
-}
-
-uint16_t readId(uint32_t address)
-{
-  if (in_eicsp) {
-    uint16_t id;
-    if(readRegisters(address, 1, &id)) {
-      return id;
-    }
-    return 0;
-  }
-  return readWord(address);
-}
-
 uint16_t readWord(uint32_t address)
 {
   // Exit Reset vector
@@ -721,46 +515,47 @@ void progPage(uint32_t address, uint32_t *data)
   NOP();
 }
 
-void eraseExec()
+void eraseBlocks(uint32_t address, uint16_t numBlocks)
 {
-  eraseBlock(EXEC_ADDR);
-  eraseBlock(EXEC_ADDR + ERASE_BLOCK_SIZE);
-}
-
-void eraseBlock(uint32_t address)
-{
-  eraseMemory(address, false);
+  eraseMemory(address, numBlocks, false);
 }
 
 void eraseChip()
 {
-  eraseMemory(0, true);
+  eraseMemory(0, 1, true);
 }
 
-void eraseMemory(uint32_t address, bool chipErase)
+void eraseMemory(uint32_t address, uint16_t numPages, bool chipErase)
 {
   // Exit the Reset vector.
   NOP();
   GOTO(0x200);
   NOP();
-  int eraseTime = chipErase ? 400 : 40; // P11/P12
+  int eraseTime = 40; // P12
+  uint16_t mode = 0x4042;
+  if (chipErase) {
+    numPages = 1;
+    mode = 0x404f;
+    eraseTime = 400;  // P11
+  }
   
-  // Initialize the NVMCON to erase memory.
-  uint16_t mode = chipErase ? 0x404f : 0x4042;
-  MOVI(mode, W0);
-  MOVW(W0, NVMCON);
-  MOVI(address >> 16, W0);
-  MOVW(W0, TBLPAG);
-  MOVI(address & 0xffff, W1);
-  NOP();
-  TBLWTL(W1, DIRECT, W1, INDIRECT);
-  NOP();
-  NOP();
-  BSET(NVMCON, WR);
-  NOP();
-  NOP();
-  delay(eraseTime);
-  pollWR(W2);
+  for(uint16_t page = 0; page < numPages; page++) {
+    address += page * 0x400;
+    MOVI(mode, W0);
+    MOVW(W0, NVMCON);
+    MOVI(address >> 16, W0);
+    MOVW(W0, TBLPAG);
+    MOVI(address & 0xffff, W1);
+    NOP();
+    TBLWTL(W1, DIRECT, W1, INDIRECT);
+    NOP();
+    NOP();
+    BSET(NVMCON, WR);
+    NOP();
+    NOP();
+    delay(eraseTime);
+    pollWR(W2);
+  }
 }
 
 void pollWR(uint8_t wreg)
@@ -779,12 +574,31 @@ void pollWR(uint8_t wreg)
   }
 }
 
-void write(uint32_t data, int bits)
+// Extended ICSP funtions
+
+
+bool memoryBlankCheck()
 {
-  for (int i = 0; i < bits; i++)
-  {
-    writeBit((data >> i) & 1);
+  Serial.println(CmdMemorySize);
+  String hexSize = readSerial();
+  uint32_t size = strtoul(hexSize.c_str(), 0, 16);
+  return blankCheck(size);
+}
+
+void readMemoryPageEx() {
+  Serial.println(CmdMemoryAddr);
+  String hexAddr = readSerial();
+  uint32_t address = strtoul(hexAddr.c_str(), 0, 16);
+
+  readCodeMemory(address, 64, code_buffer);
+
+  int n = 0;
+  for (int i = 0; i < 64; i += 2) {
+    unpackTwoWords(&code_buffer[n], &page_buffer[i]);
+    n += 3;
   }
+  
+  sendPageHex();
 }
 
 bool sanityCheck()
@@ -803,14 +617,14 @@ bool blankCheck(uint32_t size)
   uint16_t input[2];
   input[0] = size >> 16;
   input[1] = size & 0xffff;
-  execCommand(QBLANK, 3, input, NULL, 100000, &resp);
+  execCommand(QBLANK, 3, input, NULL, 700000, &resp);
   if(resp.opcode == PASS) {
     return (resp.qe_code == 0xf0);
   }
   return false;
 }
 
-uint16_t executiveVersion()
+uint16_t readExecVersion()
 {
   resp_t resp;
   execCommand(QVER, 1, NULL, NULL, 1000, &resp);
@@ -818,6 +632,64 @@ uint16_t executiveVersion()
     return resp.qe_code;
   }
   return 0;
+}
+
+bool loadApplicationEx()
+{
+  while(true) {
+    Serial.println(CmdSendPage);
+    String page = readSerial();
+    if (page == CmdNoPages) {
+      break;
+    }
+    uint32_t address;
+    if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
+      Serial.println("parse failed");
+      return false;
+    }
+    
+    int n = 2;
+    for (int i = 0; i < 64; i += 2) {
+      packTwoWords(&page_buffer[i], &code_buffer[n]);
+      n += 3;
+    }
+    
+    if(!writeCodeMemory(address, 0, code_buffer)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool verifyApplicationEx()
+{
+  while(true) {
+    Serial.println(CmdSendPage);
+    String page = readSerial();
+    if (page == CmdNoPages) {
+      break;
+    }
+    uint32_t address;
+    if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
+      return false;
+    }
+    
+    if(!readCodeMemory(address, 64, code_buffer)) {
+      return false;
+    }
+
+    int n = 0;
+    uint32_t unpacked[2]; 
+    for (int i = 0; i < 64; i += 2) {
+      unpackTwoWords(&code_buffer[n], unpacked);
+      if(unpacked[0] != page_buffer[i] || unpacked[1] != page_buffer[i + 1]) {
+        Serial.println("VERIFY_FAIL");
+        return false;
+      }
+      n += 3;
+    }
+  }
+  return true;
 }
 
 bool readRegisters(uint32_t address, int count, uint16_t *output)
@@ -876,14 +748,46 @@ bool writeCodeWord(uint32_t address, uint32_t data)
   return(resp.opcode == PASS && resp.last_cmd == PROGW && resp.qe_code == 0);
 }
 
+bool erasePages(uint32_t address, uint16_t numPages)
+{
+  resp_t resp;
+  uint16_t input[2];
+  input[0] = numPages << 8;
+  input[0] |= (address >> 16) & 0xff;
+  input[1] = address & 0xffff;
+  execCommand(ERASEP, 3, input, NULL, 25000, &resp);
+  return(resp.opcode == PASS && resp.last_cmd == ERASEP && resp.qe_code == 0);
+}
+
+bool eraseChipEx()
+{
+  resp_t resp;
+  uint16_t input[1];
+  input[0] = 3;
+  execCommand(ERASEB, 2, input, NULL, 125000, &resp);
+  return(resp.opcode == PASS && resp.last_cmd == ERASEB && resp.qe_code == 0);
+}
+
+bool calculateCRC(uint32_t address, uint32_t size, uint16_t *crc)
+{
+  resp_t resp;
+  uint16_t input[4];
+  input[0] = address >> 16;
+  input[1] = address & 0xffff;
+  input[2] = size >> 16;
+  input[3] = size & 0xffff;
+  execCommand(CRCP, 5, input, crc, 1000000, &resp);
+  return(resp.opcode == PASS && resp.last_cmd == CRCP && resp.qe_code == 0);
+}
+
 void execCommand(uint8_t command, uint16_t length, uint16_t *input, uint16_t *output, uint32_t timeoutMicros, resp_t *resp)
 {
   uint16_t data = command;
   data <<= 12;
   data |= length & 0xfff;
-  writeToExec(data, 16);
+  writeExec(data, 16);
   for(int i = 1; i < length; i++) {
-    writeToExec(input[i - 1], 16);
+    writeExec(input[i - 1], 16);
   }
   delayMicroseconds(12); // P8 12us
   pinMode(DATA, INPUT);
@@ -896,20 +800,114 @@ void execCommand(uint8_t command, uint16_t length, uint16_t *input, uint16_t *ou
     return;
   }
   delayMicroseconds(23); // P20 23us
-  resp->header = readFromExec();
+  resp->header = readExec();
   delayMicroseconds(8);  // P21 8ns?? typo in data sheet? Needs 8us not 8ns
-  resp->length = readFromExec();
+  resp->length = readExec();
   if(resp->opcode == PASS) {
     for(int i = 2; i < resp->length; i++) {
       delayMicroseconds(8); // P21 8ns
-      output[i - 2] = readFromExec();
+      output[i - 2] = readExec();
     }
   }
   delayMicroseconds(1);
   pinMode(DATA, OUTPUT);
 }
 
-void writeToExec(uint32_t data, int bits)
+// Common utility functions
+
+void packTwoWords(uint32_t *unpacked, uint16_t *packed)
+{
+  packed[0] = unpacked[0] & 0xffff;
+  packed[1] = (unpacked[0] >> 16) & 0xff;
+  packed[1] |= (unpacked[1] >> 8) & 0xff00;
+  packed[2] = unpacked[1] & 0xffff;
+}
+
+void unpackTwoWords(uint16_t *packed, uint32_t *unpacked)
+{
+  unpacked[0] = packed[1] & 0xff;
+  unpacked[0] <<= 16;
+  unpacked[0] |= packed[0];
+  unpacked[1] = packed[1] & 0xff00;
+  unpacked[1] <<= 8;
+  unpacked[1] |= packed[2];
+}
+
+uint16_t readDevId()
+{
+  return readId(REG_DEVID);
+}
+
+uint16_t readAppId()
+{
+  return readId(REG_APPID);
+}
+
+uint16_t readId(uint32_t address)
+{
+  if (in_eicsp) {
+    uint16_t id;
+    if(readRegisters(address, 1, &id)) {
+      return id;
+    }
+    return 0;
+  }
+  return readWord(address);
+}
+
+bool enterICSP(bool enhanced)
+{
+  digitalWrite(MCLR, HIGH);
+  digitalWrite(MCLR, LOW);
+  delayMicroseconds(1); // P18 = 40ns
+  uint32_t code = enhanced ? 0x4D434850 : 0x4D434851;
+  writeExec(code, 32);
+
+  digitalWrite(DATA, LOW);
+  digitalWrite(CLK, LOW);
+
+  delay(2);  // P19 = 1ms
+  digitalWrite(MCLR, HIGH);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(26); // P7 =  25ms
+  if (enhanced) {
+    in_icsp = true;
+    in_eicsp = true;
+    return sanityCheck();
+  }
+  uint32_t data = readDevId();
+  return (data & 0xff00) == 0x4200; // PIC24 family
+}
+
+void exitICSP()
+{
+  digitalWrite(DATA, LOW);
+  digitalWrite(CLK, LOW);
+  digitalWrite(MCLR, LOW);
+  digitalWrite(LED_BUILTIN, LOW);
+  in_icsp = false;
+  in_eicsp = false;
+}
+
+void reset()
+{
+  digitalWrite(MCLR, LOW);
+  delayMicroseconds(2);
+  digitalWrite(MCLR, HIGH);
+  digitalWrite(LED_BUILTIN, HIGH);
+  in_icsp = false;
+  in_eicsp = false;
+}
+
+void write(uint32_t data, int bits)
+{
+  for (int i = 0; i < bits; i++)
+  {
+    writeBit((data >> i) & 1);
+  }
+}
+
+void writeExec(uint32_t data, int bits)
 {
   bits -= 1;
   for (int i = bits; i >= 0; i--)
@@ -921,9 +919,10 @@ void writeToExec(uint32_t data, int bits)
   }
 }
 
-uint16_t readFromExec()
+uint16_t readExec()
 {
   uint16_t b0, b1;
+  // EICSP is MSb first
   for(int i = 15; i >= 0; i--)
   {
     b0 = readBit(true);
@@ -941,10 +940,10 @@ void writeOp(uint32_t op)
   int bits = 4;
   if (!in_icsp) {
     in_icsp = true;
-    bits = 9;
+    bits += 5;                // 5 extra clocks on ICSP entry
   }
   write(SIX, bits);
-  delayMicroseconds(1); // P4 = 40ns
+  delayMicroseconds(1);       // P4 = 40ns
   write(op, 24);
   if (debugging) {
     Serial.println(op, HEX);
@@ -955,18 +954,19 @@ uint16_t regout()
 {
   uint16_t value = 0;
   write(REGOUT, 4);
-  delayMicroseconds(1); // P4 = 40ns
-  write(0, 8);          // CPU idle 8 cycles
+  delayMicroseconds(1);       // P4 = 40ns
+  write(0, 8);                // CPU idle 8 cycles
   pinMode(DATA, INPUT);
-  delayMicroseconds(1); // P5 = 20ns
+  delayMicroseconds(1);       // P5 = 20ns
   uint16_t b;
+  // ICSP is LSb first
   for(int i = 0; i < 16; i++)
   {
     b = readBit(false);
     value |= b << i;
   }
   pinMode(DATA, OUTPUT);
-  delayMicroseconds(1); // P4A = 40ns
+  delayMicroseconds(1);       // P4A = 40ns
   if (debugging) {
     Serial.print("->");
     Serial.println(value, HEX);
@@ -977,23 +977,87 @@ uint16_t regout()
 void writeBit(int state)
 {
   digitalWrite(DATA, state);
-  digitalWrite(CLK, HIGH);
-  delayMicroseconds(1);    // P1B 40ns
-  digitalWrite(CLK, LOW);  // clocked out
-  delayMicroseconds(1);    // P1A 40ns
+  digitalWrite(CLK, HIGH);    // Data change
+  delayMicroseconds(1);       // P1B 40ns
+  digitalWrite(CLK, LOW);     // Data write
+  delayMicroseconds(1);       // P1A 40ns
 }
 
 byte readBit(bool fallingEdge)
 {
   byte _bit;
-  digitalWrite(CLK, HIGH); 
-  delayMicroseconds(1);    // P1B 40ns
-  _bit = digitalRead(DATA);
-  digitalWrite(CLK, LOW); 
+  digitalWrite(CLK, HIGH);    // Change ICSP
+  delayMicroseconds(1);       // P1B 40ns
+  _bit = digitalRead(DATA);   // Read ICSP
+  digitalWrite(CLK, LOW);     // Change EICSP
   if (fallingEdge) {
-    delayMicroseconds(1);  // P1A 40ns
-    _bit = digitalRead(DATA);
+    delayMicroseconds(1);     // P1A 40ns
+    _bit = digitalRead(DATA); // Read EICSP
   }
-  delayMicroseconds(1);    // P1A 40ns
+  delayMicroseconds(1);       // P1A 40ns
   return _bit;
+}
+
+// Serial data utilities
+
+String readSerial() {
+  while(Serial.available() == 0);
+  String data = Serial.readStringUntil('\n');
+  data.toUpperCase();
+  data.trim();
+  return data;
+}
+
+void serialResponse(String command, bool send) {
+  if(send) {
+    Serial.println(command);
+  } else {
+    Serial.print(command);
+  }
+}
+
+bool parseHexPage24(String page, uint32_t *address, uint32_t *out_data, uint32_t size)
+{
+  const char sep = ' ';
+  int start = 0;
+  int length = page.length();
+  int pos = page.indexOf(sep);
+  if (pos > 0) {
+    String addr = page.substring(start, pos);
+    int col = addr.indexOf(':');
+    if (col != -1) {
+      addr[col] = '\0';
+    }
+    *address = strtoul(addr.c_str(), 0, 16);
+    start = pos + 1;
+    pos = page.indexOf(sep, start);
+    int i = 0;
+    bool done = false;
+    while(!done) {
+      if(i >= size || start >= length) {
+        return false;
+      }
+      if(pos == -1) {
+        done = true;
+        pos = length;
+      }
+      String s = page.substring(start, pos);
+      out_data[i++] = strtoul(s.c_str(), 0, 16);
+      start = pos + 1;
+      pos = page.indexOf(sep, start);
+    }
+    return true;
+  }
+  return false;
+}
+
+void sendPageHex() {
+  String hex = "";
+  for (int i = 0; i < 64; i++)
+  {
+    hex += ' ' + String(page_buffer[i], HEX);
+  }
+  hex.trim();
+  Serial.print(CmdTextOut);
+  Serial.println(hex.c_str());
 }

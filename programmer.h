@@ -26,10 +26,49 @@
 #define PROGW     0xd // Program One Word of Code Memory and Verify
 #define QBLANK    0xa // Query if the Code Memory is Blank
 #define QVER      0xb // Query the Programming Executive software version
+#define ERASEB    0x7 // Bulk erase entire chip (Undocumented but working) 
+#define ERASEP    0x9 // Erase page(s) (Undocumented but working) 
+#define CRCP      0xc // CRC-16 calculation (Undocumented, untested) 
 
 #define PASS      1
 #define FAIL      2
 #define NACK      3
+
+// serial commands and responses
+#define CmdError            "ERROR"
+#define CmdReset            "RESET"
+#define CmdDataOut          "DATAOUT:"
+#define CmdTextOut          "TEXTOUT:"
+#define CmdInitialize       "INITIALIZE"
+#define CmdBlankCheck       "BLANKCHECK"
+#define CmdReadWord         "READWORD"
+#define CmdReadPage         "READPAGE"
+#define CmdEraseExec        "ERASEEXEC"
+#define CmdEraseBlocks      "ERASEBLOCKS"
+#define CmdEraseChip        "ERASECHIP"
+#define CmdEnterICSP        "ENTERICSP"
+#define CmdEnterEICSP       "ENTEREICSP"
+#define CmdExitICSP         "EXITICSP"
+#define CmdDebugEnable      "DEBUGON"
+#define CmdDebugDisable     "DEBUGOFF"
+#define CmdRequestApp       "REQUESTAPP"
+#define CmdRequestExec      "REQUESTEXEC"
+#define CmdSendPage         "SENDPAGE"
+#define CmdLoadApp          "LOADAPP"
+#define CmdLoadExec         "LOADEXEC"
+#define CmdVerifyApp        "VERIFYAPP"
+#define CmdVerifyExec       "VERIFYEXEC"
+#define CmdVerifyFail       "VERIFYFAIL"
+#define CmdExecVersion      "EXECVERSION"
+#define CmdDeviceID         "DEVICEID"
+#define CmdAppID            "APPID"
+#define CmdResetMCU         "RESETMCU"
+#define CmdMemoryAddr       "MEMORYADDR"
+#define CmdMemorySize       "MEMORYSIZE"
+#define CmdNumPages         "NUMPAGES"
+#define CmdNoPages          "NOPAGES"
+#define CmdWrongMode        "WRONGMODE"
+#define CmdMemoryCRC        "MEMORYCRC"
 
 typedef union exec_resp
 {
