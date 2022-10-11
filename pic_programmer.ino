@@ -205,6 +205,8 @@ bool verifyProgramExecutive()
       return false;
     }
     if(!verifyPage(address, page_buffer)) {
+      Serial.print(CmdDataOut);
+      Serial.println(address, DEC);
       Serial.println(CmdVerifyFail);
       return false;
     }
@@ -253,6 +255,9 @@ bool verifyApplication()
     }
 
     if(!verifyPage(address, page_buffer)) {
+      Serial.print(CmdDataOut);
+      Serial.println(address, DEC);
+      Serial.println(CmdVerifyFail);
       return false;
     }
   }
@@ -646,7 +651,6 @@ bool loadApplicationEx()
     }
     uint32_t address;
     if(!parseHexPage24(page, &address, page_buffer, page_buffer_size)) {
-      Serial.println("parse failed");
       return false;
     }
     
@@ -685,7 +689,9 @@ bool verifyApplicationEx()
     for (int i = 0; i < 64; i += 2) {
       unpackTwoWords(&code_buffer[n], unpacked);
       if(unpacked[0] != page_buffer[i] || unpacked[1] != page_buffer[i + 1]) {
-        Serial.println("VERIFY_FAIL");
+        Serial.print(CmdDataOut);
+        Serial.println(address, DEC);
+        Serial.println(CmdVerifyFail);
         return false;
       }
       n += 3;
